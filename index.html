@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="pt-BR"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Podcast do Adri - Sem Eco - Voz Limpa</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#0a0a0a;color:#fff;font-family:Arial,sans-serif;padding:16px}
+.top{text-align:center;border:2px solid #d4af37;border-radius:16px;padding:16px;background:#111}
+.top h1{margin:0;font-size:26px;color:#ffd700}.top p{margin:6px 0 0;color:#ccc}
+.card{background:#1a1a1a;border-radius:16px;padding:16px;margin-top:14px}
+label{font-weight:bold;display:block;margin-top:10px}input,textarea{width:100%;padding:12px;border-radius:10px;border:1px solid #333;background:#000;color:#fff;font-size:16px}
+.timer{font-size:48px;text-align:center;font-weight:bold;margin:10px 0}
+.wave{height:40px;background:#000;border-radius:10px;display:flex;align-items:center;justify-content:center;gap:4px;overflow:hidden}
+.bar{width:6px;background:#ff3b30;border-radius:3px;height:8px}
+.btn{width:100%;padding:16px;border:0;border-radius:12px;font-size:19px;font-weight:bold;cursor:pointer;margin-top:10px}
+.gravar{background:#e53935;color:#fff}.parar{background:#333;color:#fff}.baixar{background:#1a7f37;color:#fff}
+.ep{background:#222;border-radius:12px;padding:12px;margin-top:10px}
+.ep b{font-size:17px}.ep small{color:#aaa;display:block}
+.ep button{padding:10px 12px;border-radius:10px;border:0;font-weight:bold;margin:4px 4px 0 0;cursor:pointer}
+.dica{background:#111;border-left:4px solid #d4af37;padding:12px;border-radius:10px;margin-top:14px;font-size:14px;line-height:1.5}
+.badge{display:inline-block;background:#1a7f37;padding:4px 10px;border-radius:20px;font-size:12px;font-weight:bold}
+.opt{display:flex;gap:8px;margin-top:10px}.opt button{flex:1;padding:12px;border-radius:10px;border:2px solid #444;background:#222;color:#fff;font-weight:bold;cursor:pointer}.opt button.on{background:#1a7f37;border-color:#1a7f37}
+</style></head><body>
+<div class="top"><h1>🎙️ PODCAST DO ADRI</h1><p>Sem Eco • Voz Limpa • Sem Chiado</p><span class="badge">✅ SEM ECO • REMOVEDOR LEVE</span></div>
+<div class="card">
+<label>Título do episódio</label><input id="titulo" placeholder="Ex: Ep 1 - Deus me trouxe de volta">
+<label>Descrição</label><textarea id="desc" rows="2" placeholder="Sobre o que é esse episódio?"></textarea>
+<label>Convidado (opcional)</label><input id="conv" placeholder="Nome do convidado">
+<label>Modo de voz:</label>
+<div class="opt"><button id="modoLimpo" class="on">🎤 VOZ LIMPA<br><small>Sem eco</small></button><button id="modoCru">📢 VOZ CRUA<br><small>Sem filtro</small></button></div>
+<div class="timer" id="timer">00:00</div>
+<div class="wave" id="wave"></div>
+<button class="btn gravar" id="btnGravar">🔴 GRAVAR EPISÓDIO</button>
+<button class="btn parar" id="btnParar" disabled>⏹ PARAR</button>
+<audio id="audio" controls style="width:100%;margin-top:10px;display:none"></audio>
+<button class="btn baixar" id="btnBaixar" style="display:none">⬇ BAIXAR EPISÓDIO</button>
+<p style="text-align:center;color:#aaa;font-size:13px">⚠️ NÃO usa fone com som alto • Fale a 15cm do celular • Use fone de ouvido se puder</p>
+</div>
+<div class="card"><h3 style="margin:0">📻 Meus Episódios</h3><div id="lista"></div><p id="vazio" style="color:#aaa">Nenhum episódio ainda. Grave o primeiro!</p></div>
+<div class="dica"><b>PRA NÃO DAR ECO:</b><br>1. Use fone de ouvido (o som não volta pro microfone)<br>2. Não deixa o celular perto da caixa de som / TV<br>3. Fale a 15cm, não grite<br>4. Lugar quieto, porta fechada<br><br><b>WhatsApp:</b> 19 99893-2588</div>
+<script>
+let rec, chunks=[], start, timerInt, audioURL, audioBlob, stream, analyser, anim, modo='limpo';
+let wave=document.getElementById('wave'); for(let i=0;i<30;i++){let d=document.createElement('div');d.className='bar';wave.appendChild(d)}
+function fmt(s){let m=Math.floor(s/60),ss=s%60;return String(m).padStart(2,'0')+':'+String(ss).padStart(2,'0')}
+function desenha(){if(!analyser)return;let data=new Uint8Array(analyser.frequencyBinCount);analyser.getByteFrequencyData(data);let bars=wave.children;for(let i=0;i<bars.length;i++){let v=data[i*2]||0;bars[i].style.height=(6+v/4)+'px';bars[i].style.background=v>100?'#ffd700':'#ff3b30'}anim=requestAnimationFrame(desenha)}
+document.getElementById('modoLimpo').onclick=()=>{modo='limpo';document.getElementById('modoLimpo').classList.add('on');document.getElementById('modoCru').classList.remove('on')};
+document.getElementById('modoCru').onclick=()=>{modo='cru';document.getElementById('modoCru').classList.add('on');document.getElementById('modoLimpo').classList.remove('on')};
+document.getElementById('btnGravar').onclick=async()=>{
+ try{
+  // SEM ECO: echoCancellation forte, sem retorno no alto-falante
+  let raw=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:false,sampleRate:48000,channelCount:1}});
+  let ctx=new AudioContext();
+  let src=ctx.createMediaStreamSource(raw);
+  analyser=ctx.createAnalyser(); analyser.fftSize=256;
+  let dest=ctx.createMediaStreamDestination();
+  if(modo==='limpo'){
+    // FILTRO LEVE - sem eco, sem deixar voz estranha
+    let hp=ctx.createBiquadFilter(); hp.type='highpass'; hp.frequency.value=100; hp.Q.value=0.7;
+    let comp=ctx.createDynamicsCompressor(); comp.threshold.value=-18; comp.knee.value=20; comp.ratio.value=3; comp.attack.value=0.01; comp.release.value=0.3;
+    let gain=ctx.createGain(); gain.gain.value=1.2;
+    src.connect(hp); hp.connect(comp); comp.connect(gain); gain.connect(dest); comp.connect(analyser);
+    // NUNCA conecta no alto-falante - isso que dava eco!
+  } else {
+    src.connect(dest); src.connect(analyser);
+  }
+  stream=dest.stream;
+  desenha();
+  let mime=MediaRecorder.isTypeSupported('audio/webm;codecs=opus')?'audio/webm;codecs=opus':'audio/webm';
+  rec=new MediaRecorder(stream,{mimeType:mime,audioBitsPerSecond:128000});chunks=[];
+  rec.ondataavailable=e=>chunks.push(e.data);
+  rec.onstop=()=>{
+    audioBlob=new Blob(chunks,{type:mime});audioURL=URL.createObjectURL(audioBlob);
+    let a=document.getElementById('audio');a.src=audioURL;a.style.display='block';document.getElementById('btnBaixar').style.display='block';
+    salvar();cancelAnimationFrame(anim);raw.getTracks().forEach(t=>t.stop());
+  };
+  rec.start();start=Date.now();timerInt=setInterval(()=>{document.getElementById('timer').textContent=fmt(Math.floor((Date.now()-start)/1000))},1000);
+  document.getElementById('btnGravar').disabled=true;document.getElementById('btnParar').disabled=false;
+ }catch(e){alert('Permita o microfone! Clique em Permitir.')}
+};
+document.getElementById('btnParar').onclick=()=>{if(rec&&rec.state!=='inactive'){rec.stop();clearInterval(timerInt);document.getElementById('btnGravar').disabled=false;document.getElementById('btnParar').disabled=true;}};
+document.getElementById('btnBaixar').onclick=()=>{if(!audioURL)return;let a=document.createElement('a');a.href=audioURL;a.download=(document.getElementById('titulo').value||'episodio-do-adri')+'.webm';a.click()};
+function carregar(){let eps=JSON.parse(localStorage.getItem('eps_adri')||'[]');let lista=document.getElementById('lista');lista.innerHTML='';document.getElementById('vazio').style.display=eps.length?'none':'block';eps.forEach((ep,i)=>{let d=document.createElement('div');d.className='ep';d.innerHTML=`<b>${ep.titulo}</b><small>${ep.data} • ${ep.dur} • ${ep.conv?('Convidado: '+ep.conv):''}</small><p style="color:#ccc;font-size:14px">${ep.desc}</p>`;let btn=document.createElement('button');btn.textContent='🗑 Apagar';btn.onclick=()=>{eps.splice(i,1);localStorage.setItem('eps_adri',JSON.stringify(eps));carregar()};d.appendChild(btn);lista.appendChild(d)})}
+function salvar(){let titulo=document.getElementById('titulo').value||'Episódio sem título';let eps=JSON.parse(localStorage.getItem('eps_adri')||'[]');eps.unshift({titulo,desc:document.getElementById('desc').value,conv:document.getElementById('conv').value,data:new Date().toLocaleDateString('pt-BR')+' '+new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}),dur:document.getElementById('timer').textContent});localStorage.setItem('eps_adri',JSON.stringify(eps));carregar();alert('Episódio salvo! ✅')}
+carregar();
+</script></body></html>
